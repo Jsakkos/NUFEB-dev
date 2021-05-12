@@ -1,0 +1,19 @@
+NUFEB Simulation
+
+     ${n_atoms} atoms
+     ${n_types} atom types
+     ${n_atoms} bacilli
+
+  ${xmin}   ${xmax}  xlo xhi
+  ${ymin}   ${ymax}  ylo yhi
+  ${zmin}   ${zmax}  zlo zhi
+
+ Atoms
+# cell# type _ density x y z _
+${atom_list}
+
+Bacilli
+#id, 6 moments-of-inertia-ixx, iyy, izz, ixy, ixz, iyz,
+#x,y,z-displacement-from-the-center-of-mass (coordinate of pole1), diameter
+
+${bacilli_list}

@@ -1,0 +1,44 @@
+---
+- name: install nufeb
+  hosts: localhost
+
+  pre_tasks:
+
+  -  name: Install prerequisite packages to compile nufeb
+     become: yes
+     when: ansible_distribution == 'Ubuntu'
+     apt:
+       update_cache: yes
+       pkg:
+       -  cmake
+       -  git-core
+       -  g++
+       -  openmpi-bin
+       -  openmpi-common
+       -  libopenmpi-dev
+       -  libpng-dev
+  -  name: Install OpenGL
+     become: yes
+     when: ansible_distribution == 'Ubuntu'
+     apt:
+       pkg:
+       -  libglu1-mesa-dev
+       -  freeglut3-dev
+       -  mesa-common-dev
+  - name: Clear open modules
+    when: ansible_distribution == 'CentOS'
+    shell: "module purge"
+  - name: Load modules PE-gnu
+    when: ansible_distribution == 'CentOS'
+    shell: "module load PE-gnu/3.0"
+  - name: Load cmake
+    when: ansible_distribution == 'CentOS'
+    shell: "module load cmake"
+
+  #tasks:
+
+  #  - name: Just ensuring the repo checkout exists
+  #    git:
+  #       repo: 'https://github.com/Jsakkos/NUFEB.git'
+  #       dest: ~/NUFEB
+  #       update: no
