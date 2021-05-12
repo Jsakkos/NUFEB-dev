@@ -42,9 +42,22 @@ parser.add_argument('--u', dest='user', action='store',
 
 args = parser.parse_args()
 
-# maximum growth rates, mu
-mu_cyanos = round(0.06/3600,7)
-mu_ecw = 2.7e-04
+# Simulation box dimensions (m)
+Dimensions = [float(x) for x in args.dims.split(',')]
+
+## Species-specific parameters
+
+CellInfo = {'cyano': {'GrowthRate' : round(0.06/3600,7),
+       'min_length' : 1e-6, 'max_length' : 5e-6, 'Diameter' : 1e-6, 'Density' : 370,
+       'Inertia' : {'ixx' : 0, 'iyy' : 0, 'izz' : 9.2e-23, 'ixy' : 0, 'ixz' : 0, 'iyz' : 0},
+         'K_s' : {'light' : 3.5e-4,'o2' : 2e-4, 'suc' : 1e-2,'co2' : 1.38e-4},
+        'Yield' : 0.55,'Maintenance' : 0,'Decay' : 0},
+         'ecw': {'GrowthRate' : 2.7e-04,
+       'min_length' : 1.94e-6, 'max_length' : 2.72e-6, 'Diameter' : 0.73e-6,'Density' : 236,
+       'Inertia' : {'ixx' : 0, 'iyy' : 0, 'izz' : 9.2e-23, 'ixy' : 0, 'ixz' : 0, 'iyz' : 0},
+         'K_s' : {'light' : 0,'o2' : 1e-3, 'suc' : 3.6,'co2' : 5e-2},
+        'Yield' : 0.43,'Maintenance' : 9.50e-7,'Decay' : 2e-5}
+}
 
 
 class Nutrient:
@@ -69,20 +82,20 @@ gco2 = Nutrient(0,None,44.01,'g','nn')
 
 class Cell:
     
-    def __init__(self,Group,Species,Growth,Minlen,Maxlen,Diam,Density,Ks,Yield,Maintenance,Decay,Inertia,Boundaries):
+    def __init__(self,Species,Group,Info = CellInfo,dims = Dimensions):
         self.group = Group
         self.species = Species
-        self.growth = Growth
-        self.min_length = Minlen
-        self.max_length = Maxlen
-        self.diameter = Diam
-        self.density = Density
-        self.Ks = Ks
-        self.yld = Yield
-        self.maintenance = Maintenance
-        self.decay = Decay
-        self.inertia = Inertia
-        self.boundaries = Boundaries
+        self.growth = Info[self.species]['GrowthRate']
+        self.min_length = Info[self.species]['min_length']
+        self.max_length = Info[self.species]['max_length']
+        self.diameter = Info[self.species]['Diameter']
+        self.density = Info[self.species]['Density']
+        self.Ks = Info[self.species]['K_s']
+        self.yld = Info[self.species]['Yield']
+        self.maintenance = Info[self.species]['Maintenance']
+        self.decay = Info[self.species]['Decay']
+        self.inertia = Info[self.species]['Inertia']
+        self.boundaries = dims
         self.length = random.uniform(self.min_length,self.max_length)
     def Atom(self):
         self.x = np.format_float_scientific(random.uniform(0,self.boundaries[0]),precision=1)
@@ -104,7 +117,7 @@ class Cell:
         return [x_displacement, y_displacement, z_displacement]
 
     def Bacillus(self):
-        return ' '.join(map(str, self.inertia + self.rotate() + [self.diameter]))
+        return ' '.join(map(str, list(self.inertia.values()) + self.rotate() + [self.diameter]))
 
 
 # check for runs folder
@@ -119,6 +132,7 @@ for n in range(1,int(args.num)+1):
         n_cyanos = int(random.uniform(1,100))
         n_ecw = int(random.uniform(1,100))
         n_cells = n_cyanos + n_ecw
+        cellCount = {'cyano' : n_cyanos,'ecw' : n_ecw}
         cyGroup = 'group CYANO type 1'
         ecwGroup = 'group ECW type 2'
         cyDiv = f'fix d1 CYANO divide 100 v_EPSdens v_divDia1 {random.randint(1,1e6)}'
@@ -128,6 +142,7 @@ for n in range(1,int(args.num)+1):
         n_cyanos = int(random.uniform(1,100))
         n_ecw = 0
         n_cells = n_cyanos
+        cellCount = {'cyano' : n_cyanos}
         cyGroup = 'group CYANO type 1'
         ecwGroup = ''
         cyDiv = f'fix d1 CYANO divide 100 v_EPSdens v_divDia1 {random.randint(1,1e6)}'
@@ -137,37 +152,13 @@ for n in range(1,int(args.num)+1):
         n_ecw = int(random.uniform(1,100))
         n_cyanos=0
         n_cells = n_ecw
+        cellCount = {'ecw' : n_ecw}
+
         cyGroup = ''
         ecwGroup = 'group ECW type 1'
         cyDiv = ''
         ecwDiv = f'fix d2 ECW divide 100 v_EPSdens v_divDia2 {random.randint(1,1e6)}'
 
-    InitialConditions = {'cyano': {'StartingCells' : n_cyanos,'GrowthRate' : mu_cyanos,
-           'min_length' : 1e-6, 'max_length' : 5e-6, 'Diameter' : 1e-6, 'Density' : 370,
-           'ixx' : 0, 'iyy' : 0, 'izz' : 9.2e-23, 'ixy' : 0, 'ixz' : 0, 'iyz' : 0,
-             'K_s' : {'sub' : 3.5e-4,'o2' : 2e-4, 'suc' : 1e-2,'co2' : 1.38e-4},
-            'GrowthParams' : {'Yield' : 0.55,'Maintenance' : 0,'Decay' : 0}},
-             'ecw': {'StartingCells' : n_ecw,'GrowthRate' : mu_ecw,
-           'min_length' : 1.94e-6, 'max_length' : 2.72e-6, 'Diameter' : 0.73e-6,'Density' : 236,
-           'ixx' : 0, 'iyy' : 0, 'izz' : 9.2e-23, 'ixy' : 0, 'ixz' : 0, 'iyz' : 0,
-             'K_s' : {'sub' : 0,'o2' : 1e-3, 'suc' : 3.6,'co2' : 5e-2},
-            'GrowthParams' : {'Yield' : 0.43,'Maintenance' : 9.50e-7,'Decay' : 2e-5}},
-            'Nutrients' : {'Concentration' :  {'sub' : 1e-1,'o2' : 9e-3, 'suc' : float(args.sucrose)*SucMW*1e-3, 'co2' : float(args.co2)*CO2MW*1e-3},
-            'State' : {'sub' : 'g','o2' : 'l', 'suc' : 'l', 'co2' : 'l'},
-            'xbc' : {'sub' : 'nn','o2' : 'nn', 'suc' : 'nn', 'co2' : 'nn'},
-            'ybc' : {'sub' : 'nn','o2' : 'nn', 'suc' : 'nn', 'co2' : 'nn'},
-            'zbc' : {'sub' : 'nn','o2' : 'nn', 'suc' : 'nn', 'co2' : 'nn'}},
-            'Diff_c' : {'sub' : 0,'o2' : 2.30e-9, 'suc' : 5.2e-10,'co2' : 1.9e-09},
-            'Dimensions' : [float(x) for x in args.dims.split(',')],'SucRatio' : SucRatio,'Replicates' : int(args.reps)
-
-            }
-    grids = int(args.grid)
-    while True:
-        if InitialConditions["Dimensions"][0]*1e6 % grids == 0 and InitialConditions["Dimensions"][1]*1e6 % grids == 0 and InitialConditions["Dimensions"][2]*1e6 % grids == 0:
-            Mesh = f'{int(InitialConditions["Dimensions"][0]*1e6/grids)} {int(InitialConditions["Dimensions"][1]*1e6/grids)} {int(InitialConditions["Dimensions"][2]*1e6/grids)}'
-            break
-        else:
-            grids +=1
 
     NutesNum = len(InitialConditions['Nutrients']['Concentration'])
     for r in range(1,int(args.reps)+1):
@@ -222,27 +213,34 @@ for n in range(1,int(args.num)+1):
 
 
         L.append('\n\n')
-        x = int(InitialConditions['Dimensions'][0]*1e6)
-        y = int(InitialConditions['Dimensions'][1]*1e6)
-        z = int(InitialConditions['Dimensions'][2]*1e6)
-        #write atom definition file
-        #open the file
-        filein = open( './templates/atom.txt' )
-        #read it
-        src = Template( filein.read() )
-        #do the substitution
-        result = src.safe_substitute({'n_atoms' : n, 'n_types' : len(cell_types), 
-                                      'xmin' : 0, 'xmax' : x,
-                                      'ymin' : 0, 'ymax' : y,
-                                      'zmin' : 0, 'zmax' : z,
-                                      'SucPct' : SucPct,
-                                  'n_cyanos' : n_cyanos, 'n_ecw' : n_ecw,
-                                  'Replicates' : args.reps,'Timesteps' : args.timesteps,
-                                  'CYANOGroup' : cyGroup,
-                                  'ECWGroup' : ecwGroup,
-                                  'Zheight' : InitialConditions["Dimensions"][2]})
-        f= open(f"./runs/atom_{n_cyanos}_{n_ecw}_{SucPct}_{r}.in","w+")
-        f.writelines(result)
+        x = int(Dimensions[0]*1e6)
+        y = int(Dimensions[1]*1e6)
+        z = int(Dimensions[2]*1e6)
+        # make atom definition file
+        for r in range(1,int(args.reps)+1):
+            L = [' NUFEB Simulation\r\n\n',f'     {n_cells} atoms \n',
+                 f'     {len(cell_types)} atom types \n',f'     {n_cells} bacilli \n\n',
+                 f'  0.0e-4   {x :.2e}  xlo xhi \n',f'  0.0e-4   {y :.2e}  ylo yhi \n',
+                 f'  0.0e-4   {z :.2e}  zlo zhi \n\n', ' Atoms \n\n'
+                 ]
+
+            # Create list of atoms and bacilli for atom definition file
+            atoms_list = []
+            bacilli_list = []
+            j = 1
+            for c, CellType in enumerate(cell_types,start=1):
+                cell = Cell(CellType,c)
+                for i in range(j,cellCount[CellType]+j):
+                    atoms_list.append(str(j) + ' ' + cell.Atom() + f' \n')
+                    bacilli_list.append(str(j) + ' ' + cell.Bacillus() + f' \n')
+                    j += 1
+            atoms = L+atoms_list
+            atoms.append('\n')
+            atoms.append(' Bacilli \n\n')
+            atoms = atoms + bacilli_list
+            #write atom definition file
+            f= open(f"./runs/atom_{n_cyanos}_{n_ecw}_{SucPct}_{r}.in","w+")
+            f.writelines(atoms)
 
 
     #write initial conditions pickle file
