@@ -36,9 +36,12 @@ class GridVecMonod : public GridVec {
   int pack_exchange(int, int *, double *);
   void unpack_exchange(int, int *, double *);
 
-  virtual void set(int, double);
+  void set(int, char **);
 
  private:
+  void set_monod(int, double);
+  void set_monod(int, double, double, double, double, double, double, double);
+
   int *mask;
   double **conc;    // concentration
   double **reac;    // reaction rate

@@ -65,12 +65,18 @@ fi
 
 # all package files with dependencies
 
-action atom_vec_coccus.cpp
+action atom_vec_coccus.cpp 
 action atom_vec_coccus.h
 action atom_vec_bacillus.cpp
 action atom_vec_bacillus.h
 action compute_volume.cpp
 action compute_volume.h
+action compute_ave_conc.h
+action compute_ave_conc.cpp
+action fix_adhesion.cpp
+action fix_adhesion.h
+action fix_adhesion_eps.cpp
+action fix_adhesion_eps.h
 action fix_death.cpp
 action fix_death.h
 action fix_density.cpp
@@ -83,14 +89,10 @@ action fix_divide_coccus.cpp
 action fix_divide_coccus.h
 action fix_divide_bacillus.cpp
 action fix_divide_bacillus.h
-action fix_divide_bacillus_minicell.cpp
-action fix_divide_bacillus_minicell.h
-action fix_adhesion.cpp
-action fix_adhesion.h
-action fix_adhesion_eps.cpp
-action fix_adhesion_eps.h
 action fix_eps_extract.cpp
 action fix_eps_extract.h
+action fix_gas_liquid.cpp
+action fix_gas_liquid.h
 action fix_monod.cpp
 action fix_monod.h
 action fix_monod_aob.cpp
@@ -107,16 +109,28 @@ action fix_monod_ecoli_wild.cpp
 action fix_monod_ecoli_wild.h
 action fix_wall_adhesion.cpp
 action fix_wall_adhesion.h
-action fix_nve_bacillus.h
 action fix_nve_bacillus.cpp
-action fix_nve_bacillus_limit.h
+action fix_nve_bacillus.h
 action fix_nve_bacillus_limit.cpp
+action fix_nve_bacillus_limit.h
+action fix_property.h
+action fix_property.cpp
+action fix_property_cycletime.h
+action fix_property_cycletime.cpp
+action fix_property_generation.h
+action fix_property_generation.cpp
+action fix_reactor.cpp
+action fix_reactor.h
+action fix_reactor_solute_balance.cpp
+action fix_reactor_solute_balance.h
+action fix_reactor_gas_balance.cpp
+action fix_reactor_gas_balance.h
 action grid_vec_monod.cpp
 action grid_vec_monod.h
+action grid_vec_reactor.cpp
+action grid_vec_reactor.h
 action nufeb_run.cpp
 action nufeb_run.h
 action pair_bacillus.h
 action pair_bacillus.cpp
-action compute_avgcon.h
-action compute_avgcon.cpp
 

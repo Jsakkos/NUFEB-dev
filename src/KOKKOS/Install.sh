@@ -73,8 +73,8 @@ action atom_vec_kokkos.cpp
 action atom_vec_kokkos.h
 action atom_vec_molecular_kokkos.cpp atom_vec_molecular.cpp
 action atom_vec_molecular_kokkos.h atom_vec_molecular.h
-action atom_vec_nufeb_kokkos.cpp atom_vec_nufeb.cpp
-action atom_vec_nufeb_kokkos.h atom_vec_nufeb.h
+action atom_vec_coccus_kokkos.cpp atom_vec_coccus.cpp
+action atom_vec_coccus_kokkos.h atom_vec_coccus.h
 action atom_vec_sphere_kokkos.cpp atom_vec_sphere.cpp
 action atom_vec_sphere_kokkos.h atom_vec_sphere.h
 action bond_class2_kokkos.cpp bond_class2.cpp 
@@ -105,14 +105,16 @@ action domain_kokkos.cpp
 action domain_kokkos.h
 action fix_deform_kokkos.cpp
 action fix_deform_kokkos.h
+action fix_density_kokkos.cpp fix_density.cpp
+action fix_density_kokkos.h fix_density.h
 action fix_diffusion_reaction_kokkos.cpp
 action fix_diffusion_reaction_kokkos.h
 action fix_enforce2d_kokkos.cpp
 action fix_enforce2d_kokkos.h
 action fix_eos_table_rx_kokkos.cpp fix_eos_table_rx.cpp
 action fix_eos_table_rx_kokkos.h fix_eos_table_rx.h
-action fix_eps_adhesion_kokkos.cpp fix_eps_adhesion.cpp
-action fix_eps_adhesion_kokkos.h fix_eps_adhesion.h
+action fix_eps_adhesion_kokkos.cpp fix_adhesion_eps.cpp
+action fix_eps_adhesion_kokkos.h fix_adhesion_eps.h
 action fix_freeze_kokkos.cpp fix_freeze.cpp
 action fix_freeze_kokkos.h fix_freeze.h
 action fix_gravity_kokkos.cpp
@@ -127,6 +129,8 @@ action fix_monod_het_kokkos.cpp fix_monod_het.cpp
 action fix_monod_het_kokkos.h fix_monod_het.h
 action fix_monod_nob_kokkos.cpp fix_monod_nob.cpp
 action fix_monod_nob_kokkos.h fix_monod_nob.h
+action fix_monod_cyano_kokkos.cpp fix_monod_cyano.cpp
+action fix_monod_cyano_kokkos.h fix_monod_cyano.h
 action fix_neigh_history_kokkos.cpp
 action fix_neigh_history_kokkos.h
 action fix_nh_kokkos.cpp

@@ -262,12 +262,28 @@ void GridVecMonodKokkos::unpack_exchange_kokkos(int first, int last, const DAT::
 
 /* ---------------------------------------------------------------------- */
 
+void GridVecMonodKokkos::set(int sub, double domain)
+{
+  sync(Host, GMASK_MASK);
+  sync(Host, CONC_MASK);
+  
+  for (int i = 0; i < grid->ncells; i++) {
+    if (!(mask[i] & CORNER_MASK)) {
+      conc[sub][i] = domain;
+    }
+  }
+
+  modified(Host, CONC_MASK);
+}
+
+/* ---------------------------------------------------------------------- */
+
 void GridVecMonodKokkos::set(int sub, double domain, double nx, double px,
 			     double ny, double py, double nz, double pz)
 {
   sync(Host, GMASK_MASK);
   sync(Host, CONC_MASK);
-  
+
   for (int i = 0; i < grid->ncells; i++) {
     if (!(mask[i] & CORNER_MASK)) {
       if (mask[i] & X_NB_MASK) {
