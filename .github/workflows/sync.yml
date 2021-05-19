@@ -39,13 +39,12 @@ jobs:
   merge-cyano:
       runs-on: ubuntu-latest
       steps:
-        - uses: actions/checkout@v2
-        - name: Merge cyano branch
+        - name: Checkout
+          uses: actions/checkout@v2
+          with:
+            ref: 'cyano'   
+        - name: Merge
           run: |
-            git config --global user.name Jsakkos
-            git config --global user.email jonathansakkos@protonmail.com
-            git checkout origin/cyano
-            git pull origin cyano
             git fetch origin
             git merge origin/master
             git push origin cyano
