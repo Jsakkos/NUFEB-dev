@@ -43,6 +43,7 @@ jobs:
         - name: Merge master
           run: |
             git checkout -b cyano
+            git config pull.rebase false
             git fetch origin
             git pull origin cyano
             git merge origin/master
