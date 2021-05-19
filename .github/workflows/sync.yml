@@ -17,7 +17,7 @@ on:
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  merge:
+  merge-master:
       runs-on: ubuntu-latest
       steps:
         - uses: actions/checkout@v2
@@ -36,9 +36,13 @@ jobs:
             git fetch upstream
             git merge --no-edit upstream/master
             git push origin master
-            
+  merge-cyano:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v2
+        - name: Merge master
+          run: |
             git checkout -b cyano
-            git pull
             git fetch origin
             git merge origin/master
             git push origin cyano
