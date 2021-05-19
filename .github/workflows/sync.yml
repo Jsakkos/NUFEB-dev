@@ -35,8 +35,8 @@ jobs:
             git remote add upstream https://github.com/nufeb/NUFEB-dev
             git fetch upstream
             git merge --no-edit upstream/master
-            git push origin master
+            git push
             git checkout -b cyano
             git merge origin/master
-            git push origin cyano
+            git push
 
