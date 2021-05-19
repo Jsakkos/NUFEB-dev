@@ -42,10 +42,8 @@ jobs:
         - uses: actions/checkout@v2
         - name: Merge master
           run: |
-            git checkout -b cyano
-            git config pull.rebase false
+            git checkout cyano
             git fetch origin
-            git pull origin cyano
             git merge origin/master
             git push origin cyano
 
