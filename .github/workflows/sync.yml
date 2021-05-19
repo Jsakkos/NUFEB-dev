@@ -1,6 +1,6 @@
 # This is a basic workflow to help you get started with Actions
 
-name: CI
+name: Merge Upstream
 
 # Controls when the action will run. 
 on:
@@ -36,4 +36,7 @@ jobs:
             git fetch upstream
             git merge --no-edit upstream/master
             git push origin master
+            git checkout -b cyano
+            git merge origin/master
+            git push origin cyano
 
