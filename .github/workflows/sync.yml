@@ -44,6 +44,7 @@ jobs:
           run: |
             git checkout -b cyano
             git fetch origin
+            git pull origin cyano
             git merge origin/master
             git push origin cyano
 
