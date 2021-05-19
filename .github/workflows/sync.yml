@@ -33,10 +33,11 @@ jobs:
                                   # to fetch all git depth right from the start)
 
             git remote add upstream https://github.com/nufeb/NUFEB-dev
-            git fetch upstream/master
+            git fetch upstream
             git merge --no-edit upstream/master
             git push
             git checkout -b cyano
+            git fetch origin
             git merge origin/master
             git push
 
