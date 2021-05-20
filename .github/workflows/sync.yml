@@ -39,20 +39,13 @@ jobs:
   merge-cyano:
       runs-on: ubuntu-latest
       steps:
-        - name: Checkout
-          uses: actions/checkout@v2
-          with:
-            ref: 'cyano'   
+        - uses: actions/checkout@v2
         - name: Merge
           run: |
             git config --global user.name Jsakkos
             git config --global user.email jonathansakkos@protonmail.com
-
-            git pull --unshallow  # this option is very important, you would get
-                                  # complains about unrelated histories without it.
-                                  # (but actions/checkout@v2 can also be instructed
-                                  # to fetch all git depth right from the start)
             git checkout origin/cyano
+            git pull --unshallow
             git fetch origin
             git merge origin/master
             git push origin cyano
