@@ -44,8 +44,8 @@ jobs:
           run: |
             git config --global user.name Jsakkos
             git config --global user.email jonathansakkos@protonmail.com
-            git checkout origin/cyano
             git pull --unshallow
+            git checkout origin/cyano
             git fetch origin
             git merge origin/master
             git push origin cyano
