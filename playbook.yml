@@ -34,7 +34,11 @@
   - name: Load cmake
     when: ansible_distribution == 'CentOS'
     shell: "module load cmake"
-
+  - name: Install DataFed
+    pip:
+      name: datafed
+      state: latest
+      extra_args: --user
   - name: Make sure NUFEB-release is installed
     git:
        repo: 'https://github.com/Jsakkos/NUFEB.git'

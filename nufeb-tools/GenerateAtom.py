@@ -8,7 +8,9 @@ import os # For file level operations
 import time # For timing demonstrations
 import datetime # To demonstrate conversion between date and time formats
 from datafed.CommandLib import API
-
+from itertools import combinations 
+import itertools
+from collections import defaultdict
 # arguments to modify the conditions of the simulation seeding
 parser = argparse.ArgumentParser(description='Create atom definition files')
 parser.add_argument('--n', dest='num', action='store',
@@ -19,14 +21,19 @@ parser.add_argument('--r', dest='reps', action='store',
                    help='Number of replicates')
 parser.add_argument('--c',dest='culture_type',action='store',default='co',
                     help='Set culture conditions with --c (co-culture), --ax-c (cyano), --ax-e (e.coli)')
+parser.add_argument('--cells', dest='cells_init',action='store',default=50,
+                    help='Number of total cells to initialize simulation with')
 parser.add_argument('--co2', dest='co2', action='store',
                    default=1e3,
                    help='Set initial CO2 concentration (mM)')
 parser.add_argument('--d', dest='dims', action='store', type=str,
                    default='1e-4,1e-4,1e-5',
                    help='Set simulation box dimensions (m)')
-parser.add_argument('--t', dest='timesteps', action='store',
-                   default=35000,
+parser.add_argument('--ts', dest='timestep', action='store',
+                   default=600,
+                   help='Timestep length')
+parser.add_argument('--t', dest='ntimesteps', action='store',
+                   default=600,
                    help='Number of timesteps to run')
 parser.add_argument('--suc', dest='sucrose', action='store',
                    default=1e-19,
@@ -39,6 +46,17 @@ parser.add_argument('--mono', dest='monolayer', action='store',
                   help='Set seed generation to monolayer of cells')
 parser.add_argument('--u', dest='user', action='store',
                   help='CADES/CNMS user ID')
+parser.add_argument('--vtk',dest='vtk',action='store',default=True,
+                    help='Enable VTK dump')
+parser.add_argument('--hdf5',dest='hdf',action='store',default=True,
+                    help='Enable HDF5 dump')
+parser.add_argument('--img',dest='img',action='store',default=False,
+                    help='Enable image dump')
+parser.add_argument('--mov',dest='movie',action='store',default=True,
+                    help='Enable movie dump')
+parser.add_argument('--datafed', dest='datafed', action = 'store', default=False,
+                    help='DataFed Upload')
+
 
 args = parser.parse_args()
 
@@ -61,6 +79,10 @@ CellInfo = {'cyano': {'GrowthRate' : round(0.06/3600,7),
 
 
 class Nutrient:
+    """
+    Nutrient class to define the chemicals present in the simulation volume, 
+    their concentrations, and their properties
+    """
     
     def __init__(self, c, d,mw,state,bc):
         self.concentration = c
@@ -73,16 +95,11 @@ class Nutrient:
         else:
             self.concentrationNufeb = np.format_float_scientific(self.concentration,precision=1)
         
-        
-light = Nutrient(1e-1,None,None,'g','nn')
-co2 = Nutrient(float(args.co2),1.9e-09,44.01,'l','nn')
-o2 = Nutrient(0.28125,2.30e-9,32,'l','nn')
-sucrose = Nutrient(float(args.sucrose),5.2e-10,342.3,'l','nn')
-gco2 = Nutrient(0,None,44.01,'g','nn')
-
 class Cell:
-    
-    def __init__(self,Species,Group,Info = CellInfo,dims = Dimensions):
+    """
+    Bacteria object class
+    """
+    def __init__(self,Species,Group,idx, Info = CellInfo,dims = Dimensions,monolayer = args.monolayer):
         self.group = Group
         self.species = Species
         self.growth = Info[self.species]['GrowthRate']
@@ -97,205 +114,316 @@ class Cell:
         self.inertia = Info[self.species]['Inertia']
         self.boundaries = dims
         self.length = random.uniform(self.min_length,self.max_length)
+        self.monolayer = monolayer
+        self.x = random.uniform(0,self.boundaries[0])
+        self.y = random.uniform(0,self.boundaries[1])
+        if self.monolayer:
+            self.z = 1e-6
+        else:
+            self.z = random.uniform(0,self.boundaries[2])
+        self.angle = random.uniform(1,180)
+        self.x_displacement = np.format_float_scientific(self.length/2*np.cos(self.angle*np.pi/360),precision=1)
+        self.y_displacement = np.format_float_scientific(self.length/2*np.sin(self.angle*np.pi/360),precision=1)
+        self.z_displacement = 0
+        self.z_angle = 0
+        self.index = idx
+        
     def Atom(self):
-        self.x = np.format_float_scientific(random.uniform(0,self.boundaries[0]),precision=1)
-        self.y = np.format_float_scientific(random.uniform(0,self.boundaries[1]),precision=1)
-        self.z = np.format_float_scientific(random.uniform(0,self.boundaries[2]),precision=1)
-        return ' '.join(map(str, [self.group, 1, self.density, self.x,self.y,self.z,1]))
+        """
+        Function to return atom (cell) positions to render atom.in file
+        """
+        return ' '.join(map(str, [self.index+1,self.group, 1, self.density, 
+                np.format_float_scientific(self.x,precision=2),
+                np.format_float_scientific(self.y,precision=2),
+                np.format_float_scientific(self.z,precision=2),1, ' \n']))
     
 
     def rotate(self,z_dim = False):
-        angle = random.uniform(1,180)
-        x_displacement = np.format_float_scientific(self.length/2*np.cos(angle*np.pi/360),precision=1)
-        y_displacement = np.format_float_scientific(self.length/2*np.sin(angle*np.pi/360),precision=1)
+        """
+        Randomly generate cell orientation displacements based on input angle
+        """
+        self.x_displacement = np.format_float_scientific(self.length/2*np.cos(self.angle*np.pi/360),precision=1)
+        self.y_displacement = np.format_float_scientific(self.length/2*np.sin(self.angle*np.pi/360),precision=1)
         zd = z_dim
         if zd == True:
-            z_angle = random.uniform(1,180)
-            z_displacement = np.format_float_scientific(self.length/2*np.sin(z_angle*np.pi/360),precision=1)
+            self.z_angle = random.uniform(1,180)
+            self.z_displacement = np.format_float_scientific(self.length/2*np.sin(self.z_angle*np.pi/360),precision=1)
         else:
-            z_displacement = 0
-        return [x_displacement, y_displacement, z_displacement]
+            self.z_displacement = 0
+            self.z_angle = 0
+        return [self.x_displacement, self.y_displacement, self.z_displacement]
 
     def Bacillus(self):
-        return ' '.join(map(str, list(self.inertia.values()) + self.rotate() + [self.diameter]))
+        """
+        Function to return rod shape (bacillus) parameters to render atom.in file
+        """
+        return ' '.join(map(str, [self.index+1] + list(self.inertia.values()) + self.rotate() + [self.diameter] + [' \n']))
+
+    def Report(self):
+        """
+        Return cell position, orientation, and size
+        """
+        return [self.x,self.y,self.z,self.angle,self.length,self.diameter]
+    def Check(self):
+        """
+        Return cell position, orientation, and size
+        """
+        return self.x,self.y,self.length, self.index 
+
+        
+class Culture:
+    """
+    Create a collection of cells with defined positions, lengths, and orientations
+    """
+    def __init__(self, cultureType, cells):
+        self.cultureType = cultureType
+        self.n_cells = int(cells)
+        self.SucRatio = round(random.random(),3)
+        self.SucPct = int(self.SucRatio*100)
+    
+        if self.cultureType == 'co':
+            self.cell_types = ['cyano','ecw']
+            self.n_cyanos = int(random.uniform(1,self.n_cells-1))
+            self.n_ecw = int(self.n_cells-self.n_cyanos)
+            # self.n_cells = n_cyanos + n_ecw
+            self.cellCount = {'cyano' : self.n_cyanos,'ecw' : self.n_ecw}
+            self.cyGroup = 'group CYANO type 1'
+            self.ecwGroup = 'group ECW type 2'
+            self.cyDiv = f'fix div_cya CYANO nufeb/divide/bacillus {CellInfo["cyano"]["max_length"]} {random.randint(1,1e6)}'
+            self.ecwDiv = f'fix div_ecw ECW nufeb/divide/bacillus {CellInfo["ecw"]["max_length"]} {random.randint(1,1e6)}'
+            self.cyMonod = f'fix monod_cyano CYANO nufeb/monod/cyano light {CellInfo["cyano"]["K_s"]["light"] : .2e} o2 co2 {CellInfo["cyano"]["K_s"]["co2"] : .2e} suc gco2 growth {CellInfo["cyano"]["GrowthRate"] : .2e} yield {CellInfo["cyano"]["Yield"] : .2e} suc_exp {self.SucRatio}'
+            self.ecwMonod = f'fix monod_ecw ECW nufeb/monod/ecoli/wild suc {CellInfo["ecw"]["K_s"]["suc"] : .2e} o2 {CellInfo["ecw"]["K_s"]["o2"] : .2e} co2 growth {CellInfo["ecw"]["GrowthRate"] : .2e} yield {CellInfo["ecw"]["Yield"] : .2e} maintain {CellInfo["ecw"]["Maintenance"] : .2e} decay {CellInfo["ecw"]["Decay"] : .2e}'
+            self.cyanoCount = 'variable ncyano equal "count(CYANO)"'
+            self.ecwCount = 'variable necw equal "count(ECW)"'
+            self.vcyano = 'v_ncyano'
+            self.vecw = 'v_necw'
+        elif self.cultureType == 'ax-c':
+            self.cell_types = ['cyano']
+            self.n_cyanos = int(random.uniform(1,self.n_cells))
+            self.n_ecw = 0
+            # self.n_cells = n_cyanos
+            self.cellCount = {'cyano' : self.n_cyanos}
+            self.cyGroup = 'group CYANO type 1'
+            self.ecwGroup = ''
+            self.cyDiv = f'fix div_cya CYANO nufeb/divide/bacillus {CellInfo["cyano"]["max_length"]} {random.randint(1,1e6)}'
+            self.ecwDiv = ''
+            self.cyMonod = f'fix monod_cyano CYANO nufeb/monod/cyano light {CellInfo["cyano"]["K_s"]["light"] : .2e} o2 co2 {CellInfo["cyano"]["K_s"]["co2"] : .2e} suc gco2 growth {CellInfo["cyano"]["GrowthRate"] : .2e} yield {CellInfo["cyano"]["Yield"] : .2e} suc_exp {self.SucRatio}'
+            self.ecwMonod = ''
+            self.cyanoCount = 'variable ncyano equal "count(CYANO)"'
+            self.ecwCount = ''
+            self.vcyano = 'v_ncyano'
+            self.vecw = ''
+        elif self.cultureType == 'ax-e':
+            self.cell_types = ['ecw']
+            self.n_ecw = int(random.uniform(1,self.n_cells))
+            self.n_cyanos=0
+            # self.n_cells = n_ecw
+            self.cellCount = {'ecw' : self.n_ecw}
+            self.cyGroup = ''
+            self.ecwGroup = 'group ECW type 1'
+            self.cyDiv = ''
+            self.ecwDiv = f'fix div_ecw ECW nufeb/divide/bacillus {CellInfo["ecw"]["max_length"]} {random.randint(1,1e6)}'
+            self.cyMonod = ''
+            self.ecwMonod = f'fix monod_ecw ECW nufeb/monod/ecoli/wild suc {CellInfo["ecw"]["K_s"]["suc"] : .2e} o2 {CellInfo["ecw"]["K_s"]["o2"] : .2e} co2 growth {CellInfo["ecw"]["GrowthRate"] : .2e} yield {CellInfo["ecw"]["Yield"] : .2e} maintain {CellInfo["ecw"]["Maintenance"] : .2e} decay {CellInfo["ecw"]["decay"] : .2e}'
+            self.cyanoCount = ''
+            self.ecwCount = 'variable necw equal "count(ECW)"'
+            self.vcyano = ''
+            self.vecw = 'v_necw'
+        counter = itertools.count(0)
+        self.cells = [Cell(CellType,c,next(counter)) for c, CellType in enumerate(self.cell_types,start=1) for i in range(self.cellCount[CellType])]
+        self.Check()
+    def __iter__(self):
+        return iter(self.cells)
+
+    def Check(self):
+        """
+        Check initial positions of each cell and move one of them if there is a collision
+        """
+        cleared = False
+        while not cleared:
+            for i in list(combinations([cell.Check() for cell in self.cells],2)):
+            # for i in list(combinations(zip(self.locations.x,self.locations.y,self.locations.length,self.locations.index),2)):
+                x1 = i[0][0]
+                y1 = i[0][1]
+                r1 = i[0][2]/2
+                idx1 = i[0][3]
+                x2 = i[1][0]
+                y2 = i[1][1]
+                r2 = i[1][2]/2
+                idx1 = i[0][3]
+                idx2 = i[1][3]
+                distance = (x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2);
+                radii = (r1 + r2) * (r1 + r2);
+                if (distance == radii):
+                    cleared = True
+                elif (distance > radii):
+                    cleared = True
+                else:
+                    if x1 > x2 and y1 > y2:
+                        if x1 + r1 > 0 and x1 + r1 < Dimensions[0] and y1 + r1 > 0 and y1 + r1 < Dimensions[1]:
+                            self.cells[idx1].x = x1 + r1/2
+                            self.cells[idx1].y = y1 + r1/2
+                    elif x1 > x2 and y1 < y2:
+                        if x1 + r1 > 0 and x1 + r1 < Dimensions[0] and y1 - r1 > 0 and y1 - r1 < Dimensions[1]:
+                            self.cells[idx1].x = x1 + r1/2
+                            self.cells[idx1].y = y1 - r1/2
+                    elif x1 < x2 and y1 > y2:
+                        if x1 - r1 > 0 and x1 - r1 < Dimensions[0] and y1 + r1 > 0 and y1 + r1 < Dimensions[1]:
+                            self.cells[idx1].x = x1 - r1/2
+                            self.cells[idx1].y = y1 + r1/2
+                    else:
+                        if x1 - r1 > 0 and x1 - r1 < Dimensions[0] and y1 - r1 > 0 and y1 - r1 < Dimensions[1]:
+                            self.cells[idx1].x = x1 - r1/2
+                            self.cells[idx1].y = y1 - r1/2
+                        #print(f'Bumped from {x1 :.2e}, {y1 :.2e} to {self.cells[idx1].x :.2e}, {self.cells[idx1].y :.2e}')
+                    cleared = False
+        return
+
+# create nutrients
+light = Nutrient(1e-1,None,None,'g','nn')
+co2 = Nutrient(float(args.co2),1.9e-09,44.01,'l','nn')
+o2 = Nutrient(0.28125,2.30e-9,32,'l','nn')
+sucrose = Nutrient(float(args.sucrose),5.2e-10,342.3,'l','nn')
+gco2 = Nutrient(0,None,44.01,'g','nn')
+
+
+captureRate = round(1000/args.timestep)
+# define dump parameters
+dump_list = {'vtk_dump' : f'dump atom_vtk all vtk {captureRate} dump*.vtu id type diameter vx vy vz fx fy fz  \n dump grid_vtk all grid/vtk {captureRate} dump_%_*.vti con',
+         'image_dump' : f'dump du_image all image {captureRate} image.*.jpg type diameter zoom 2 bacillus type size 1280 720 view 45 60 \n dump_modify du_image acolor 1 green acolor 2 red',
+         'movie_dump' : f'dump du_mov all movie {captureRate} movie.avi type diameter zoom 1.5 bacillus type size 1280 720 view 0 0 \n dump_modify du_mov acolor 1 green acolor 2 red',
+         'hdf_dump' : f'dump du_h5 all nufeb/hdf5 {captureRate} dump.h5 id type x y z vx vy vz fx fy fz radius conc reac'         
+         }   
+
+
+dumps = defaultdict(list)
+for i in range(4):
+    tmp = ['vtk_dump','image_dump','movie_dump','hdf_dump']
+    dumps[tmp[i]]    
+    
+for dump,dump_var in zip([args.vtk,args.img,args.movie,args.hdf],['vtk_dump','image_dump','movie_dump','hdf_dump']):
+    if dump is True or dump == 'True':
+        dumps[dump_var] = dump_list[dump_var]
+    else:
+        dumps[dump_var] = ''
+
+
+        
+ 
+
+
 
 
 # check for runs folder
 if not os.path.isdir('runs'):
     os.mkdir('runs')
-
+x = float(Dimensions[0])
+y = float(Dimensions[1])
+z = float(Dimensions[2])
 for n in range(1,int(args.num)+1):
-    SucRatio = round(random.random(),3)
-    SucPct = int(SucRatio*100)
-    if args.culture_type == 'co':
-        cell_types = ['cyano','ecw']
-        n_cyanos = int(random.uniform(1,100))
-        n_ecw = int(random.uniform(1,100))
-        n_cells = n_cyanos + n_ecw
-        cellCount = {'cyano' : n_cyanos,'ecw' : n_ecw}
-        cyGroup = 'group CYANO type 1'
-        ecwGroup = 'group ECW type 2'
-        cyDiv = f'fix d1 CYANO divide 100 v_EPSdens v_divDia1 {random.randint(1,1e6)}'
-        ecwDiv = f'fix d2 ECW divide 100 v_EPSdens v_divDia2 {random.randint(1,1e6)}'
-    elif args.culture_type == 'ax-c':
-        cell_types = ['cyano']
-        n_cyanos = int(random.uniform(1,100))
-        n_ecw = 0
-        n_cells = n_cyanos
-        cellCount = {'cyano' : n_cyanos}
-        cyGroup = 'group CYANO type 1'
-        ecwGroup = ''
-        cyDiv = f'fix d1 CYANO divide 100 v_EPSdens v_divDia1 {random.randint(1,1e6)}'
-        ecwDiv = ''
-    elif args.culture_type == 'ax-e':
-        cell_types = ['ecw']
-        n_ecw = int(random.uniform(1,100))
-        n_cyanos=0
-        n_cells = n_ecw
-        cellCount = {'ecw' : n_ecw}
-
-        cyGroup = ''
-        ecwGroup = 'group ECW type 1'
-        cyDiv = ''
-        ecwDiv = f'fix d2 ECW divide 100 v_EPSdens v_divDia2 {random.randint(1,1e6)}'
-
-
-    NutesNum = len(InitialConditions['Nutrients']['Concentration'])
+    culture = Culture(args.culture_type, args.cells_init)
+    atoms_list = []
+    bacilli_list = []
+    # Create list of atoms and bacilli for atom definition file
+    for cell in culture.cells:
+        atoms_list.append(cell.Atom())
+        bacilli_list.append(cell.Bacillus())
+    # make atom definition file
     for r in range(1,int(args.reps)+1):
-        L = [' NUFEB Simulation\r\n\n',f'     {n_cells} atoms \n',
-             f'     {len(cell_types)} atom types \n',f'     {NutesNum} nutrients \n\n',
-             f'  0.0e-4   {InitialConditions["Dimensions"][0] :.2e}  xlo xhi \n',f'  0.0e-4   {InitialConditions["Dimensions"][1] :.2e}  ylo yhi \n',
-             f'  0.0e-4   {InitialConditions["Dimensions"][2] :.2e}  zlo zhi \n\n', ' Atoms \n\n'
-             ]
+        L = [' NUFEB Simulation\r\n\n',f'     {args.cells_init} atoms \n',
+              f'     {len(culture.cell_types)} atom types \n',f'     {args.cells_init} bacilli \n\n',
+              f'  0.0e-4   {x :.2e}  xlo xhi \n',f'  0.0e-4   {y :.2e}  ylo yhi \n',
+              f'  0.0e-4   {z :.2e}  zlo zhi \n\n', ' Atoms \n\n'
+              ]
+        atoms = L+atoms_list
+        atoms.append('\n')
+        atoms.append(' Bacilli \n\n')
+        atoms = atoms + bacilli_list
+        #write atom definition file
+        f= open(f"./runs/atom_{culture.n_cyanos}_{culture.n_ecw}_{culture.SucPct}_{r}.in","w+")
+        f.writelines(atoms)
 
-        j = 1
-        for c, CellType in enumerate(cell_types,start=1):
-            for i in range(j,InitialConditions[CellType]['StartingCells']+j):
-                length = random.uniform(InitialConditions[CellType]['min_length'],
-                                      InitialConditions[CellType]['max_length'])
-                x = random.uniform(0+length,InitialConditions['Dimensions'][0]-length)
-                y = random.uniform(0+length,InitialConditions['Dimensions'][1]-length)
-                z = random.uniform(0+length,InitialConditions['Dimensions'][2]-length)
-                L.append(f'     %d {c} {length :.2e}  {InitialConditions[CellType]["Density"]} {x :.2e} {y :.2e} {z :.2e} {length :.2e} \n'% (i))
-                j += 1
-
-        L.append('\n')
-        L.append(' Nutrients \n\n')
-        for i,nute in enumerate(InitialConditions['Nutrients']['Concentration'].keys()):
-            L.append(f'     %d {nute} {InitialConditions["Nutrients"]["State"][nute]} {InitialConditions["Nutrients"]["xbc"][nute]} {InitialConditions["Nutrients"]["ybc"][nute]} {InitialConditions["Nutrients"]["zbc"][nute]} {InitialConditions["Nutrients"]["Concentration"][nute] :.2e} {InitialConditions["Nutrients"]["Concentration"][nute] :.2e} \n'% (i+1))
-
-        L.append('\n')
-        L.append(' Type Name \n\n')
-        for c, CellType in enumerate(cell_types,start=1):
-            L.append(f'     {c} {CellType}  \n')
-        L.append('\n')
-        L.append(' Diffusion Coeffs \n\n')
-        for key in InitialConditions['Diff_c'].keys():
-            L.append(f'     {key} {InitialConditions["Diff_c"][key]} \n')
-        L.append('\n')
-        L.append(' Growth Rate \n\n')
-        for CellType in cell_types:
-            L.append(f'     {CellType} {InitialConditions[CellType]["GrowthRate"]} \n')
-        L.append('\n')
-        L.append(' Ks \n\n')
-        for CellType in cell_types:
-            k = f'     {CellType}'
-            for key in InitialConditions[CellType]['K_s'].keys():
-                k = k + ' ' + str(InitialConditions[CellType]['K_s'][key])
-            k = k + f' \n'
-            L.append(k)
-        L.append('\n')
-        for key in InitialConditions["cyano"]['GrowthParams'].keys():
-            L.append(' ' + key + f' \n\n')
-            for CellType in cell_types:
-                L.append(f'     {CellType} {InitialConditions[CellType]["GrowthParams"][key]} \n')
-            L.append('\n')
-
-
-        L.append('\n\n')
-        x = int(Dimensions[0]*1e6)
-        y = int(Dimensions[1]*1e6)
-        z = int(Dimensions[2]*1e6)
-        # make atom definition file
-        for r in range(1,int(args.reps)+1):
-            L = [' NUFEB Simulation\r\n\n',f'     {n_cells} atoms \n',
-                 f'     {len(cell_types)} atom types \n',f'     {n_cells} bacilli \n\n',
-                 f'  0.0e-4   {x :.2e}  xlo xhi \n',f'  0.0e-4   {y :.2e}  ylo yhi \n',
-                 f'  0.0e-4   {z :.2e}  zlo zhi \n\n', ' Atoms \n\n'
-                 ]
-
-            # Create list of atoms and bacilli for atom definition file
-            atoms_list = []
-            bacilli_list = []
-            j = 1
-            for c, CellType in enumerate(cell_types,start=1):
-                cell = Cell(CellType,c)
-                for i in range(j,cellCount[CellType]+j):
-                    atoms_list.append(str(j) + ' ' + cell.Atom() + f' \n')
-                    bacilli_list.append(str(j) + ' ' + cell.Bacillus() + f' \n')
-                    j += 1
-            atoms = L+atoms_list
-            atoms.append('\n')
-            atoms.append(' Bacilli \n\n')
-            atoms = atoms + bacilli_list
-            #write atom definition file
-            f= open(f"./runs/atom_{n_cyanos}_{n_ecw}_{SucPct}_{r}.in","w+")
-            f.writelines(atoms)
-
+####
 
     #write initial conditions pickle file
-    dumpfile = open(f"./runs/run_{n_cyanos}_{n_ecw}_{SucPct}.pkl",'wb')
-    pickle.dump(InitialConditions,dumpfile)
+    dumpfile = open(f"./runs/run_{culture.n_cyanos}_{culture.n_ecw}_{culture.SucPct}.pkl",'wb')
+    pickle.dump(CellInfo,dumpfile)
     dumpfile.close()
+    ###
+    
     #write Inputscript
     #open the file
-    filein = open( './templates/Inputscript.txt' )
+    filein = open( './templates/Bacillus.txt' )
     #read it
     src = Template( filein.read() )
     #do the substitution
-    result = src.safe_substitute({'n' : n, 'SucRatio' : SucRatio, 'SucPct' : SucPct,
-                                  'n_cyanos' : n_cyanos, 'n_ecw' : n_ecw,
-                                  'Replicates' : args.reps,'Timesteps' : args.timesteps,
-                                  'CYANOGroup' : cyGroup,
-                                  'ECWGroup' : ecwGroup,
-                                  'Zheight' : InitialConditions["Dimensions"][2],
-                                 'CYANODiv'  : cyDiv, 'ECWDiv' : ecwDiv,
-                                 'GridMesh' : f'{int(InitialConditions["Dimensions"][0]*1e6/int(args.grid))} {int(InitialConditions["Dimensions"][1]*1e6/int(args.grid))} {int(InitialConditions["Dimensions"][2]*1e6/int(args.grid))}'})
-    f= open(f"./runs/Inputscript_{n_cyanos}_{n_ecw}_{SucPct}.lammps","w+")
+    result = src.safe_substitute({'n' : args.cells_init, 
+                                  'SucRatio' : culture.SucRatio, 
+                                  'SucPct' : culture.SucPct,
+                                  'n_cyanos' : culture.n_cyanos, 
+                                  'n_ecw' : culture.n_ecw,
+                                  'Replicates' : args.reps,
+                                  'Timesteps' : args.ntimesteps,
+                                  'ts' : args.timestep,
+                                  'CYANOGroup' : culture.cyGroup,
+                                  'ECWGroup' : culture.ecwGroup,
+                                  'Zheight' : Dimensions[2],
+                                  'CYANODiv'  : culture.cyDiv, 
+                                  'ECWDiv' : culture.ecwDiv,
+                                  'light' : light.concentration, 
+                                  'co2' : co2.concentration, 
+                                  'o2' : o2.concentration, 
+                                  'sucrose' : sucrose.concentration, 
+                                  'gco2' : gco2.concentration,
+                                  'CYANOMonod' : culture.cyMonod,
+                                  'ECWMonod' : culture.ecwMonod,
+                                  'CYANOcount' : culture.cyanoCount,
+                                  'ECWcount' : culture.ecwCount,
+                                  'v_ncyano' : culture.vcyano,
+                                  'v_necw' : culture.vecw,
+                                  'vtk_dump': dumps['vtk_dump'],
+                                  'image_dump' : dumps['image_dump'],
+                                  'movie_dump' : dumps['movie_dump'],
+                                  'hdf_dump' : dumps['hdf_dump']
+                                 })
+    f= open(f"./runs/Inputscript_{culture.n_cyanos}_{culture.n_ecw}_{culture.SucPct}.lmp","w+")
     f.writelines(result)
 
 
 
-
+    if args.datafed is True or args.datafed == 'True':
     #create DataFed collection to hold the results
-    df_api = API()
-    df_api.setContext('p/eng107')
-    collectionName = f'NUFEB_{n_cyanos}_{n_ecw}_{SucPct}_{x}_{y}_{z}'
-    parent_collection = df_api.getAuthUser().split('/')[1]
-    coll_msg = df_api.collectionCreate(collectionName,
-                                    parent_id=parent_collection)
-    global_coll_id = coll_msg[0].coll[0].id
+        df_api = API()
+        df_api.setContext('p/eng107')
+        collectionName = f'NUFEB_{culture.n_cyanos}_{culture.n_ecw}_{culture.SucPct}_{x}_{y}_{z}'
+        parent_collection = df_api.getAuthUser().split('/')[1]
+        coll_msg = df_api.collectionCreate(collectionName,
+                                        parent_id=parent_collection)
+        global_coll_id = coll_msg[0].coll[0].id
+    else:
+        global_coll_id = None
 
-    #write slurm script
-    #open the file
-    filein = open( './templates/Slurm.txt' )
-    #read it
-    src = Template( filein.read() )
-    #do the substitution
-    result = src.safe_substitute({'n' : n, 'job' : f"NUFEB_cyano{n}",
-                                    'USER' : args.user,'Replicates'  : args.reps,
-                                    'SucPct' : SucPct,'n_cyanos' : n_cyanos,
-                                    'n_ecw' : n_ecw,'id': global_coll_id})
-    f= open(f"./runs/Inputscript_{n_cyanos}_{n_ecw}_{SucPct}.slurm","w+")
-    f.writelines(result)
+
     #write local run script
     #open the file
     filein = open( './templates/local.txt' )
     #read it
     src = Template( filein.read() )
     #do the substitution
-    result = src.safe_substitute({'n' : n, 'SucRatio' : SucRatio, 'SucPct' : SucPct,
-                                  'n_cyanos' : n_cyanos, 'n_ecw' : n_ecw,
+    result = src.safe_substitute({'n' : n, 'SucRatio' : culture.SucRatio, 'SucPct' : culture.SucPct,
+                                  'n_cyanos' : culture.n_cyanos, 'n_ecw' : culture.n_ecw,
                                   'Reps' : args.reps,'id': global_coll_id})
-    f= open(f"./runs/local_{n_cyanos}_{n_ecw}_{SucPct}.sh","w+")
+    f= open(f"./runs/local_{culture.n_cyanos}_{culture.n_ecw}_{culture.SucPct}.sh","w+")
     f.writelines(result)
+#write slurm script
+#open the file
+filein = open( './templates/Slurm.txt' )
+#read it
+src = Template( filein.read() )
+#do the substitution
+result = src.safe_substitute({'n' : args.cells_init, 'job' : f"NUFEB_cyano{n}",
+                                'USER' : args.user,'Replicates'  : args.reps,
+                                'SucPct' : culture.SucPct,'n_cyanos' : culture.n_cyanos,
+                                'n_ecw' : culture.n_ecw,'id': global_coll_id})
+f= open(f"./RunBatch.slurm","w+")
+f.writelines(result)
